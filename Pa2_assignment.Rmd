@@ -1,0 +1,96 @@
+---
+title: "Health and Economic Impact of Severe Weather in the USA"
+author: "David Thayer"
+date: "Monday, December 15, 2014"
+keep_md: true
+output: html_document
+---
+
+```{r, cache = TRUE}
+
+
+data <- read.csv("repdata-data-StormData.csv.bz2", na.strings = "NA", stringsAsFactors =FALSE)   
+data$BGN_DATE <- as.POSIXct(data$BGN_DATE, format = "%m/%d/%Y")
+data$END_DATE <- as.POSIXct(data$END_DATE, format = "%m/%d/%Y")          
+
+```
+In this study we will examine an extract of the NOAA Satellite and Information Service Storm Data. This data has been collected over the years 1950-2011 under variuous protocols for recording data that has evolved over time.  Therefore the data is fairly dirty and difficult to deal with.  In this study I will be looking at the distribution of crop damage, property damage, injuries and fatalities by type of event and over time. The first step taken in the preprocessing stage is to extract the data for each category we will be studying grouped by event type and determine the most significant groups in each category.  In figure 1 we have plotted each categories sum by event ordered by magnitude in a set of plots that clearly show the exponential decrease in magnitude by ranking.  Therefore it is only necessary to use the top few categories by ranking to study 95% of the data points.  
+
+In this study we will follow a two step procedure. 
+1. Determine the event types that account for 95% of the summed data, and extract this data.
+2. Break each category down into a table with rows representing decade and columns representing event categories.
+
+The columns for Crop Damage Multiplier (CROPDMGEXP)  and Property Damage Multiplier (PROPDMGEXP).  Examining the values found in this field we get the following list of values 
+Crop Damage Multipliers [`r unique(data$CROPDMGEXP)`]
+Property Damage Multipliers [`r unique(data$PROPDMGEXP)`]
+Some of these values are simply lower cases of the other such as 'h' and 'H' etc.  Lacking a Code Book for interpreting the data it seems prudent to simply ignore anomqlous entries.  We are however going to accept the lower case versions of the acceptable exponents.It seems wise to count how many actual existing data value will be thrown out by this procedure.
+```{r anomalous marks, cache=TRUE}
+anomalies <- c("", "?", "+", "-", "0", "1", "2", "3", "4", "5", "6", "7", "8")
+anomalousMarks <- function(EXP, DMG, mark) {
+  list(mark, dim(data[EXP == mark & DMG > 0,])[1] )
+}
+
+sigCropAnomalousMarks <- sapply(anomalies, function(mark) anomalousMarks(data$CROPDMGEXP, data$CROPDMG, mark))
+
+sigPropAnomalousMarks <- sapply(anomalies, function(mark) anomalousMarks(data$PROPDMGEXP, data$PROPDMG, mark))
+```
+
+
+```{r, results='asis' }
+library(xtable)
+anomCropMarks <- unlist(sigCropAnomalousMarks[2,])[1:dim(sigCropAnomalousMarks)[2]]
+anomPropMarks <- unlist(sigPropAnomalousMarks[2,])[1:dim(sigPropAnomalousMarks)[2]]
+
+tableEntries <- function(marks) {
+  names <- names(marks)
+  counts <- marks
+  names(counts) <- NULL
+  data.frame(names, counts)
+}
+
+cropMarks <- xtable(tableEntries(anomCropMarks))
+propmarks <- xtable(tableEntries(anomPropMarks))
+```
+`r print(cropMarks, type = "html")`
+`r print(propMarks, type = "html")`
+
+```{r processing step 1}
+injurydata <- data.frame(data$EVTYPE, data$FATALITIES, data$INJURIES, data$BGN_DATE, data$END_DATE)
+names(injurydata) <- c("EventType", "Fatalities", "Injuries", "Begin", "End")
+damagedata <- data.frame(data$EVTYPE, data$PROPDMG, data$PROPDMGEXP, data$CROPDMG, data$CROPDMGEXP, data$BGN_DATE, data$END_DATE)
+names(damagedata) <- c("EventType", "PropertyDamage", "PropertyExp", "CropDamage", "CropExp", "Begin", "End")
+injuriesByEvent <- split(injurydata, injurydata$EventType)
+damageByEvent <- split(damagedata, damagedata$EventType)
+summaryPropDamageByEvent <- sapply(damageByEvent, function(grp) sum(grp$PropertyDamage))
+summaryCropDamageByEvent <- sapply(damageByEvent, function(grp) sum(grp$CropDamage))
+summaryFatalitiesByEvent <- sapply(injuriesByEvent, function(grp) sum(grp$Fatalities))
+summaryInjuriesByEvent <- sapply(injuriesByEvent, function(grp) sum(grp$Injuries))
+```
+
+
+```{r}
+significantPropDamageEvents <- 
+  sort(summaryPropDamageByEvent[summaryPropDamageByEvent != 0], decreasing = TRUE)
+
+significantCropDamageEvents <- 
+  sort(summaryCropDamageByEvent[summaryCropDamageByEvent != 0], decreasing = TRUE)
+
+significantInjuryEvents <- 
+  sort(summaryInjuriesByEvent[summaryInjuriesByEvent != 0], decreasing = TRUE)
+
+significantFatalityEvents <- 
+  sort(summaryFatalitiesByEvent[summaryFatalitiesByEvent != 0], decreasing = TRUE)
+
+```
+
+```{r, echo=FALSE}
+## par(mfrow = c(2,2))
+## plot(names(significantPropDamageEvents), significantPropDamageEvents, type = "l", col = "blue")
+## plot(names(significantCropDamageEvents), significantCropDamageEvents, type = "l", col = "green")
+## plot(names(significantInjuryEvents), significantInjuryEvents, type = "l", col = "black")
+## plot(names(significantFatalityEvents), significantFatalityEvents, type = "l", col = "red")
+
+```
+
+
+
